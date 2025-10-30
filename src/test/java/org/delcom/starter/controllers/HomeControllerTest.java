@@ -1,4 +1,3 @@
-
 package org.delcom.starter.controllers;
 
 import org.junit.jupiter.api.Test;
@@ -7,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HomeControllerUnitTest {
+
     // Test untuk metode hello()
     @Test
     @DisplayName("Mengembalikan pesan selamat datang yang benar")
