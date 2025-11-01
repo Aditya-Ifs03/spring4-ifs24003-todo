@@ -1,307 +1,227 @@
 package org.delcom.starter.controllers;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Base64;
 
 @RestController
 public class HomeController {
 
-    // -------------------------
-    // Utility: decode Base64
-    // -------------------------
-    private String decodeBase64(String strBase64) {
-        if (strBase64 == null) return "";
-        try {
-            byte[] base64Bytes = strBase64.getBytes();
-            byte[] decodedBytes = java.util.Base64.getDecoder().decode(new String(base64Bytes));
-            return new String(decodedBytes);
-        } catch (IllegalArgumentException e) {
-            // jika bukan Base64 yang valid, kembalikan input apa adanya
-            return strBase64;
-        }
-    }
-
-    // =========================
-    // 1) Informasi NIM
-    // =========================
-    @GetMapping("/informasiNim/{nim}")
-    public String informasiNim(@PathVariable String nim) {
-        if (nim == null || nim.isBlank()) return "NIM kosong.";
-
-        // contoh mapping prefix seperti pada materi praktikum
-        Map<String, String> map = new HashMap<>();
-        map.put("11S", "Sarjana Informatika");
-        map.put("12S", "Sarjana Sistem Informasi");
-        map.put("14S", "Sarjana Teknik Elektro");
-        map.put("21S", "Sarjana Manajemen Rekayasa");
-        map.put("22S", "Sarjana Teknik Metalurgi");
-        map.put("31S", "Sarjana Teknik Bioproses");
-        map.put("113", "Diploma 3 Teknologi Informasi");
-        map.put("114", "Diploma 4 Teknologi Rekayasa Perangkat Lunak");
-        // (tambahkan mapping lain jika perlu)
-
-        // asumsi format: PREFIX(3) + angkatan(2) + nomorUrut(rest)
-        String prefix = nim.length() >= 3 ? nim.substring(0, 3) : nim;
-        String rest = nim.length() > 3 ? nim.substring(3) : "";
-
-        String program = map.get(prefix);
-        StringBuilder sb = new StringBuilder();
-        if (program == null) {
-            sb.append("Prefix NIM '").append(prefix).append("' tidak ditemukan.");
-            return sb.toString();
-        }
-
-        // ambil 2 digit angkatan jika tersedia
-        String angkatanStr = rest.length() >= 2 ? rest.substring(0, 2) : rest;
-        String nomorUrut = rest.length() > 2 ? rest.substring(2) : "";
-
-        int tahun = -1;
-        try {
-            if (!angkatanStr.isEmpty()) {
-                tahun = 2000 + Integer.parseInt(angkatanStr);
-            }
-        } catch (NumberFormatException ignored) {}
-
-        sb.append("Informasi NIM ").append(nim).append(":\n");
-        sb.append(">> Program Studi: ").append(program).append("\n");
-        sb.append(">> Angkatan: ").append(tahun == -1 ? "tidak diketahui" : tahun).append("\n");
-        sb.append(">> Urutan: ").append(nomorUrut.isBlank() ? "tidak diketahui" : Integer.parseInt(nomorUrut)).append("\n");
-
-        return sb.toString();
-    }
-
-    // =========================
-    // 2) Perolehan Nilai
-    //    - menerima strBase64 yang berisi beberapa baris test case
-    //    - contoh baris: "T|90|21" atau "UAS|92|82" dan ada beberapa angka/metadata di atasnya
-    // =========================
-    @GetMapping("/perolehanNilai/{strBase64}")
-    public String perolehanNilai(@PathVariable String strBase64) {
-        String plain = decodeBase64(strBase64);
-        if (plain.isBlank()) return "Input kosong atau tidak valid Base64.";
-
-        // parsing baris
-        String[] lines = plain.split("\\r?\\n");
-        // kumpulkan entries berbentuk TYPE|scoreA|scoreB
-        List<String> gradeLines = new ArrayList<>();
-        for (String l : lines) {
-            String t = l.trim();
-            if (t.isEmpty() || t.equals("---")) continue;
-            if (t.contains("|")) gradeLines.add(t);
-        }
-
-        if (gradeLines.isEmpty()) return "Tidak ditemukan data nilai pada input.";
-
-        // untuk tiap entry, kita ambil skor (dua angka jika ada) lalu kumpulkan statistik sederhana
-        int count = 0;
-        double totalAll = 0.0;
-        Map<String, List<Double>> byType = new LinkedHashMap<>();
-
-        for (String g : gradeLines) {
-            String[] parts = g.split("\\|");
-            String type = parts.length > 0 ? parts[0] : "UNKNOWN";
-            List<Double> scores = new ArrayList<>();
-            for (int i = 1; i < parts.length; i++) {
-                try {
-                    scores.add(Double.parseDouble(parts[i]));
-                } catch (NumberFormatException ignored) {}
-            }
-            if (scores.isEmpty()) continue;
-
-            double avg = scores.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-            byType.computeIfAbsent(type, k -> new ArrayList<>()).add(avg);
-            totalAll += avg;
-            count++;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("Ringkasan Perolehan Nilai:\n");
-        sb.append("Jumlah entry nilai: ").append(count).append("\n");
-        sb.append(String.format("Rata-rata keseluruhan (tiap entry dihitung rata-rata skornya): %.2f\n", (count==0?0:totalAll/count)));
-
-        sb.append("\nRata-rata per jenis:\n");
-        for (Map.Entry<String, List<Double>> e : byType.entrySet()) {
-            double avgOfType = e.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-            sb.append(String.format(" - %s : rata-rata %.2f (dari %d entry)\n", e.getKey(), avgOfType, e.getValue().size()));
-        }
-
-        // contoh threshold lulus sederhana: rata-rata >= 60
-        double overall = (count==0?0:totalAll/count);
-        sb.append("\nStatus kelulusan (threshold 60): ").append(overall >= 60.0 ? "Lulus" : "Tidak Lulus").append("\n");
-
-        return sb.toString();
-    }
-
-    // =========================
-    // 3) Perbedaan L dan Kebalikan L
-    //    - input: Base64 yang berisi matriks NxN, format baris per baris, first line = N
-    //    - L: kolom pertama + baris terakhir (hindari double count pojok)
-    //    - L-terbalik: kolom terakhir + baris pertama (hindari double count pojok)
-    // =========================
-    @GetMapping("/perbedaanL/{strBase64}")
-    public String perbedaanL(@PathVariable String strBase64) {
-        String plain = decodeBase64(strBase64);
-        if (plain.isBlank()) return "Input kosong atau tidak valid Base64.";
-
-        String[] lines = plain.split("\\r?\\n");
-        Queue<String> q = new LinkedList<>();
-        for (String l : lines) {
-            String t = l.trim();
-            if (!t.isEmpty()) q.add(t);
-        }
-        if (q.isEmpty()) return "Tidak ada data matriks.";
-
-        int n;
-        try {
-            n = Integer.parseInt(q.poll());
-        } catch (Exception ex) {
-            return "Baris pertama harus ukuran matriks (integer).";
-        }
-
-        if (n <= 0) return "Ukuran matriks harus > 0.";
-        // jika baris kurang, kembalikan error
-        int[][] m = new int[n][n];
-        for (int i = 0; i < n; i++) {
-            if (q.isEmpty()) return "Data matriks tidak lengkap.";
-            String rowLine = q.poll();
-            String[] toks = rowLine.trim().split("\\s+");
-            if (toks.length < n) return "Baris matriks " + i + " kurang kolom.";
-            for (int j = 0; j < n; j++) {
-                try {
-                    m[i][j] = Integer.parseInt(toks[j]);
-                } catch (NumberFormatException ex) {
-                    return "Nilai matriks bukan integer di baris " + i + " kolom " + j;
-                }
-            }
-        }
-
-        // kasus kecil
-        if (n == 1) {
-            return "Nilai L: Tidak Ada\nNilai Kebalikan L: Tidak Ada\nNilai Tengah: " + m[0][0] + "\nPerbedaan: Tidak Ada\nDominan: " + m[0][0];
-        }
-        if (n == 2) {
-            int total = 0;
-            for (int i=0;i<n;i++) for (int j=0;j<n;j++) total += m[i][j];
-            return "Nilai L: Tidak Ada\nNilai Kebalikan L: Tidak Ada\nNilai Tengah: " + total + "\nPerbedaan: Tidak Ada\nDominan: " + total;
-        }
-
-        // hitung L = kolom pertama + baris terakhir (hindari double count pojok)
-        int sumL = 0;
-        for (int i = 0; i < n; i++) sumL += m[i][0]; // kolom pertama
-        for (int j = 1; j < n; j++) sumL += m[n-1][j]; // baris terakhir (skip bottom-left karena sudah dihitung)
-
-        // hitung L-terbalik = kolom terakhir + baris pertama (hindari double count pojok)
-        int sumLInv = 0;
-        for (int i = 0; i < n; i++) sumLInv += m[i][n-1]; // kolom terakhir
-        for (int j = 0; j < n-1; j++) sumLInv += m[0][j]; // baris pertama (skip top-right karena sudah dihitung)
-
-        int diff = Math.abs(sumL - sumLInv);
-        String dominan = sumL > sumLInv ? "L" : (sumLInv > sumL ? "L-terbalik" : "Seimbang");
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("Nilai L: ").append(sumL).append("\n");
-        sb.append("Nilai Kebalikan L: ").append(sumLInv).append("\n");
-        // nilai tengah (diambil definisi: elemen tengah jika n odd, atau total jika even) — gunakan rata2 atau total
-        if (n % 2 == 1) {
-            int mid = m[n/2][n/2];
-            sb.append("Nilai Tengah: ").append(mid).append("\n");
-        } else {
-            sb.append("Nilai Tengah: ").append("Tidak tunggal (n genap)").append("\n");
-        }
-        sb.append("Perbedaan: ").append(diff).append("\n");
-        sb.append("Dominan: ").append(dominan).append("\n");
-
-        return sb.toString();
-    }
-
-    // =========================
-    // 4) Paling Ter (statistik frekuensi dari sekumpulan angka)
-    //    - input: Base64 berupa daftar angka satu per baris (atau pemisah spasi)
-    // =========================
-    @GetMapping("/palingTer/{strBase64}")
-    public String palingTer(@PathVariable String strBase64) {
-        String plain = decodeBase64(strBase64);
-        if (plain.isBlank()) return "Input kosong atau tidak valid Base64.";
-
-        // ambil semua token angka
-        String[] tokens = plain.split("[\\s,;]+");
-        List<Integer> numbers = new ArrayList<>();
-        for (String t : tokens) {
-            if (t == null || t.trim().isEmpty()) continue;
-            try {
-                numbers.add(Integer.parseInt(t.trim()));
-            } catch (NumberFormatException ignored) {}
-        }
-        if (numbers.isEmpty()) return "Tidak ada angka ditemukan pada input.";
-
-        int max = numbers.stream().mapToInt(Integer::intValue).max().orElse(0);
-        int min = numbers.stream().mapToInt(Integer::intValue).min().orElse(0);
-
-        // frekuensi
-        Map<Integer, Integer> freq = new HashMap<>();
-        for (int v : numbers) freq.put(v, freq.getOrDefault(v, 0) + 1);
-
-        // modus (terbanyak)
-        int mode = numbers.get(0);
-        int modeFreq = 0;
-        for (Map.Entry<Integer, Integer> e : freq.entrySet()) {
-            if (e.getValue() > modeFreq || (e.getValue() == modeFreq && e.getKey() < mode)) {
-                mode = e.getKey();
-                modeFreq = e.getValue();
-            }
-        }
-
-        // paling jarang
-        int minFreq = Integer.MAX_VALUE;
-        int least = numbers.get(0);
-        for (Map.Entry<Integer, Integer> e : freq.entrySet()) {
-            if (e.getValue() < minFreq || (e.getValue() == minFreq && e.getKey() < least)) {
-                minFreq = e.getValue();
-                least = e.getKey();
-            }
-        }
-
-        // jumlah tertinggi dan terendah (angka * frekuensi)
-        int angkaTotalMaks = Collections.max(freq.entrySet(), Map.Entry.comparingByKey()).getKey();
-        int frekuensiTotalMaks = freq.get(angkaTotalMaks);
-        int totalMaks = angkaTotalMaks * frekuensiTotalMaks;
-
-        int angkaJumlahMin = Collections.min(freq.entrySet(), Map.Entry.comparingByKey()).getKey();
-        int frekuensiTotalMin = freq.get(angkaJumlahMin);
-        int totalJumlahMin = angkaJumlahMin * frekuensiTotalMin;
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("Statistik Paling Ter:\n");
-        sb.append("Jumlah data: ").append(numbers.size()).append("\n");
-        sb.append("Tertinggi (nilai): ").append(max).append("\n");
-        sb.append("Terendah (nilai): ").append(min).append("\n");
-        sb.append("Terbanyak (modus): ").append(mode).append(" (" + modeFreq + "x)\n");
-        sb.append("Tersedikit: ").append(least).append(" (" + minFreq + "x)\n");
-        sb.append("Jumlah Tertinggi: ").append(angkaTotalMaks).append(" * ").append(frekuensiTotalMaks).append(" = ").append(totalMaks).append("\n");
-        sb.append("Jumlah Terendah: ").append(angkaJumlahMin).append(" * ").append(frekuensiTotalMin).append(" = ").append(totalJumlahMin).append("\n");
-
-        // tampilkan frekuensi ringkasan top 5
-        List<Map.Entry<Integer,Integer>> sorted = freq.entrySet().stream()
-                .sorted((a,b)->b.getValue().equals(a.getValue()) ? Integer.compare(a.getKey(), b.getKey()) : Integer.compare(b.getValue(), a.getValue()))
-                .collect(Collectors.toList());
-        sb.append("\nFrekuensi (top entries):\n");
-        int shown = Math.min(10, sorted.size());
-        for (int i = 0; i < shown; i++) {
-            Map.Entry<Integer,Integer> e = sorted.get(i);
-            sb.append(String.format(" - %d : %dx\n", e.getKey(), e.getValue()));
-        }
-
-        return sb.toString();
-    }
-
-    // contoh endpoint root
+    // ==============================
+    // 0️⃣ HALAMAN UTAMA
+    // ==============================
     @GetMapping("/")
     public String hello() {
-        return "Hello, welcome to the combined Studi Kasus API. Available endpoints: "
-                + "/informasiNim/{nim} , /perolehanNilai/{strBase64} , /perbedaanL/{strBase64} , /palingTer/{strBase64}";
+        return "Selamat datang di pengembangan aplikasi dengan Spring Boot!";
+    }
+
+    // ==============================
+    // 1️⃣ INFORMASI NIM
+    // ==============================
+    @GetMapping("/informasiNim/{nim}")
+    public String informasiNim(@PathVariable String nim) {
+        Map<String, String> prodi = new HashMap<>();
+        prodi.put("11S", "Sarjana Informatika");
+        prodi.put("12S", "Sarjana Sistem Informasi");
+        prodi.put("14S", "Sarjana Teknik Elektro");
+        prodi.put("21S", "Sarjana Manajemen Rekayasa");
+        prodi.put("22S", "Sarjana Teknik Metalurgi");
+        prodi.put("31S", "Sarjana Teknik Bioproses");
+        prodi.put("114", "Diploma 4 Teknologi Rekayasa Perangkat Lunak");
+        prodi.put("113", "Diploma 3 Teknologi Informasi");
+        prodi.put("133", "Diploma 3 Teknologi Komputer");
+
+        String kode = nim.substring(0, 3);
+        String angkatan = "20" + nim.substring(3, 5);
+        int urutan = Integer.parseInt(nim.substring(nim.length() - 3));
+
+        return String.format("""
+                Informasi NIM %s:
+                >> Program Studi: %s
+                >> Angkatan: %s
+                >> Urutan: %d
+                """, nim, prodi.getOrDefault(kode, "Tidak Dikenal"), angkatan, urutan);
+    }
+
+    // ==============================
+    // 2️⃣ PEROLEHAN NILAI
+    // ==============================
+    @GetMapping("/perolehanNilai/{strBase64}")
+    public String perolehanNilai(@PathVariable String strBase64) {
+        String decoded = new String(Base64.getDecoder().decode(strBase64));
+        Scanner sc = new Scanner(decoded);
+
+        double pa = sc.nextDouble(), t = sc.nextDouble(), k = sc.nextDouble(),
+               p = sc.nextDouble(), uts = sc.nextDouble(), uas = sc.nextDouble();
+        sc.nextLine();
+
+        int sumPA = 0, maxPA = 0;
+        int sumT = 0, maxT = 0;
+        int sumK = 0, maxK = 0;
+        int sumP = 0, maxP = 0;
+        int sumUTS = 0, maxUTS = 0;
+        int sumUAS = 0, maxUAS = 0;
+
+        while (sc.hasNextLine()) {
+            String line = sc.nextLine().trim();
+            if (line.equals("---")) break;
+            String[] parts = line.split("\\|");
+            String tipe = parts[0];
+            int max = Integer.parseInt(parts[1]);
+            int score = Integer.parseInt(parts[2]);
+            switch (tipe) {
+                case "PA" -> { maxPA += max; sumPA += score; }
+                case "T" -> { maxT += max; sumT += score; }
+                case "K" -> { maxK += max; sumK += score; }
+                case "P" -> { maxP += max; sumP += score; }
+                case "UTS" -> { maxUTS += max; sumUTS += score; }
+                case "UAS" -> { maxUAS += max; sumUAS += score; }
+            }
+        }
+
+        int paPct = maxPA == 0 ? 0 : (int) Math.floor((double) sumPA * 100 / maxPA);
+        int tPct = maxT == 0 ? 0 : (int) Math.floor((double) sumT * 100 / maxT);
+        int kPct = maxK == 0 ? 0 : (int) Math.floor((double) sumK * 100 / maxK);
+        int pPct = maxP == 0 ? 0 : (int) Math.floor((double) sumP * 100 / maxP);
+        int utsPct = maxUTS == 0 ? 0 : (int) Math.floor((double) sumUTS * 100 / maxUTS);
+        int uasPct = maxUAS == 0 ? 0 : (int) Math.floor((double) sumUAS * 100 / maxUAS);
+
+        double total = paPct / 100.0 * pa +
+                       tPct / 100.0 * t +
+                       kPct / 100.0 * k +
+                       pPct / 100.0 * p +
+                       utsPct / 100.0 * uts +
+                       uasPct / 100.0 * uas;
+
+        sc.close();
+
+        return String.format("""
+                Perolehan Nilai:
+                >> Partisipatif: %d/100 (%.2f/%.0f)
+                >> Tugas: %d/100 (%.2f/%.0f)
+                >> Kuis: %d/100 (%.2f/%.0f)
+                >> Proyek: %d/100 (%.2f/%.0f)
+                >> UTS: %d/100 (%.2f/%.0f)
+                >> UAS: %d/100 (%.2f/%.0f)
+                                
+                >> Nilai Akhir: %.2f
+                >> Grade: %s
+                """,
+                paPct, paPct / 100.0 * pa, pa,
+                tPct, tPct / 100.0 * t, t,
+                kPct, kPct / 100.0 * k, k,
+                pPct, pPct / 100.0 * p, p,
+                utsPct, utsPct / 100.0 * uts, uts,
+                uasPct, uasPct / 100.0 * uas, uas,
+                total, getGrade(total));
+    }
+
+    private String getGrade(double n) {
+        if (n >= 79.5) return "A";
+        else if (n >= 72.0) return "AB";
+        else if (n >= 64.5) return "B";
+        else if (n >= 57.0) return "BC";
+        else if (n >= 49.5) return "C";
+        else if (n >= 34.0) return "D";
+        else return "E";
+    }
+
+    // ==============================
+    // 3️⃣ PERBEDAAN L DAN KEBALIKANNYA
+    // ==============================
+    @GetMapping("/perbedaanL/{strBase64}")
+    public String perbedaanL(@PathVariable String strBase64) {
+        String decoded = new String(Base64.getDecoder().decode(strBase64));
+        Scanner sc = new Scanner(decoded);
+        int n = sc.nextInt();
+        int[][] m = new int[n][n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                m[i][j] = sc.nextInt();
+
+        if (n == 1) {
+            int val = m[0][0];
+            return String.format("""
+                    Nilai L: Tidak Ada
+                    Nilai Kebalikan L: Tidak Ada
+                    Nilai Tengah: %d
+                    Perbedaan: Tidak Ada
+                    Dominan: %d
+                    """, val, val);
+        }
+
+        int l = 0, k = 0;
+        for (int i = 0; i < n; i++) l += m[i][0];
+        for (int j = 1; j <= n - 2; j++) l += m[n - 1][j];
+
+        for (int i = 0; i < n; i++) k += m[i][n - 1];
+        for (int j = 1; j <= n - 2; j++) k += m[0][j];
+
+        int tengah;
+        if (n % 2 == 1) tengah = m[n / 2][n / 2];
+        else {
+            int a = n / 2 - 1, b = n / 2;
+            tengah = m[a][a] + m[a][b] + m[b][a] + m[b][b];
+        }
+
+        int diff = Math.abs(l - k);
+        int dominan = diff == 0 ? tengah : Math.max(l, k);
+
+        sc.close();
+        return String.format("""
+                Nilai L: %d
+                Nilai Kebalikan L: %d
+                Nilai Tengah: %d
+                Perbedaan: %d
+                Dominan: %d
+                """, l, k, tengah, diff, dominan);
+    }
+
+    // ==============================
+    // 4️⃣ PALING TER
+    // ==============================
+    @GetMapping("/palingTer/{strBase64}")
+    public String palingTer(@PathVariable String strBase64) {
+        String decoded = new String(Base64.getDecoder().decode(strBase64));
+        Scanner input = new Scanner(decoded);
+        List<Integer> data = new ArrayList<>();
+
+        while (input.hasNextLine()) {
+            String line = input.nextLine().trim();
+            if (line.equals("---")) break;
+            if (!line.isEmpty()) data.add(Integer.parseInt(line));
+        }
+
+        if (data.isEmpty()) return "Tidak ada input";
+
+        Map<Integer, Integer> counter = new LinkedHashMap<>();
+        int maxNum = Integer.MIN_VALUE, minNum = Integer.MAX_VALUE;
+        int mostCommon = 0, maxCount = 0;
+
+        for (int num : data) {
+            counter.put(num, counter.getOrDefault(num, 0) + 1);
+            int occ = counter.get(num);
+            if (occ > maxCount) {
+                maxCount = occ;
+                mostCommon = num;
+            }
+            if (num > maxNum) maxNum = num;
+            if (num < minNum) minNum = num;
+        }
+
+        int rarest = counter.entrySet().stream()
+                .min(Map.Entry.comparingByValue())
+                .get().getKey();
+
+        input.close();
+        return String.format("""
+                Tertinggi: %d
+                Terendah: %d
+                Terbanyak: %d (%dx)
+                Tersedikit: %d (%dx)
+                """,
+                maxNum, minNum,
+                mostCommon, maxCount,
+                rarest, counter.get(rarest));
     }
 }
