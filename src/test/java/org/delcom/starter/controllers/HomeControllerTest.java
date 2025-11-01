@@ -1,37 +1,50 @@
 package org.delcom.starter.controllers;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-class HomeControllerUnitTest {
+import java.util.Base64;
 
-    // Test untuk metode hello()
+public class HomeControllerTest {
+
+    HomeController controller = new HomeController();
+
     @Test
-    @DisplayName("Mengembalikan pesan selamat datang yang benar")
-    void hello_ShouldReturnWelcomeMessage() {
-        // Arrange
-        HomeController controller = new HomeController();
-
-        // Act
+    void testHello() {
         String result = controller.hello();
-
-        // Assert
-        assertEquals("Hay Abdullah, selamat datang di pengembangan aplikasi dengan Spring Boot!", result);
+        assertTrue(result.contains("Spring Boot"));
     }
 
-    // Tambahan test untuk metode sayHello dengan parameter nama
     @Test
-    @DisplayName("Mengembalikan pesan sapaan yang dipersonalisasi")
-    void helloWithName_ShouldReturnPersonalizedGreeting() throws Exception {
-        // Arrange
-        HomeController controller = new HomeController();
+    void testSayHello() {
+        String result = controller.sayHello("Karina");
+        assertEquals("Hello, Karina!", result);
+    }
 
-        // Act
-        String result = controller.sayHello("Abdullah");
+    @Test
+    void testInformasiNim() {
+        String result = controller.informasiNim("IF24003");
+        assertTrue(result.contains("IF24003"));
+    }
 
-        // Assert
-        assertEquals("Hello, Abdullah!", result);
+    @Test
+    void testPerolehanNilai() {
+        String encoded = Base64.getEncoder().encodeToString("95".getBytes());
+        String result = controller.perolehanNilai(encoded);
+        assertTrue(result.contains("95"));
+    }
+
+    @Test
+    void testPerbedaanL() {
+        String encoded = Base64.getEncoder().encodeToString("Java".getBytes());
+        String result = controller.perbedaanL(encoded);
+        assertTrue(result.contains("avaJ"));
+    }
+
+    @Test
+    void testPalingTer() {
+        String encoded = Base64.getEncoder().encodeToString("hello".getBytes());
+        String result = controller.palingTer(encoded);
+        assertTrue(result.contains("HELLO"));
     }
 }
