@@ -3,106 +3,167 @@ package org.delcom.starter.controllers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.Base64;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 class HomeControllerTest {
 
     private final HomeController controller = new HomeController();
 
-    // ==============================
-    // 0️⃣ Tes Halaman Utama
-    // ==============================
+    // ✅ Tes untuk hello()
     @Test
-    @DisplayName("hello() harus menampilkan pesan sambutan default")
+    @DisplayName("hello() menampilkan pesan sambutan dinamis")
     void testHello() {
         String result = controller.hello();
         assertTrue(result.contains("Spring Boot"));
     }
 
-    // ==============================
-    // 1️⃣ Tes Informasi NIM
-    // ==============================
+    // ✅ Tes Informasi NIM
     @Test
-    @DisplayName("informasiNim() harus menampilkan program studi dan angkatan dengan benar")
-    void testInformasiNim() {
-        String result = controller.informasiNim("11S24xxx");
-        assertTrue(result.contains("Sarjana Informatika"));
-        assertTrue(result.contains("Angkatan: 2024"));
+    @DisplayName("informasiNim() menampilkan data NIM yang valid")
+    void testInformasiNimValid() {
+        String encodedNim = Base64.getEncoder().encodeToString("IFS24003".getBytes());
+        String result = controller.informasiNim(encodedNim);
+        assertTrue(result.contains("Informatika"));
+        assertTrue(result.contains("Angkatan"));
+        assertTrue(result.contains("Urutan"));
     }
 
-    // ==============================
-    // 2️⃣ Tes Perolehan Nilai
-    // ==============================
     @Test
-    @DisplayName("perolehanNilai() harus mendekode Base64 dan menghitung nilai akhir dengan benar")
-    void testPerolehanNilai() {
-        // format input:
-        // bobot -> pa t k p uts uas
-        // data nilai -> tipe|max|score
-        String input = """
-                10 20 10 20 20 20
-                PA|10|8
-                T|20|15
-                K|10|10
-                P|20|15
-                UTS|20|10
-                UAS|20|18
-                ---
-                """;
-        String encoded = Base64.getEncoder().encodeToString(input.getBytes());
+    @DisplayName("informasiNim() menangani input kosong")
+    void testInformasiNimKosong() {
+        String result = controller.informasiNim("");
+        assertEquals("NIM tidak boleh kosong.", result);
+    }
+
+    @Test
+    @DisplayName("informasiNim() menangani input null")
+    void testInformasiNimNull() {
+        String result = controller.informasiNim(null);
+        assertEquals("NIM tidak boleh kosong.", result);
+    }
+
+    @Test
+    @DisplayName("informasiNim() menampilkan Tidak diketahui untuk NIM non-IFS")
+    void testInformasiNimTidakDiketahui() {
+        String encodedNim = Base64.getEncoder().encodeToString("ABC24003".getBytes());
+        String result = controller.informasiNim(encodedNim);
+        assertTrue(result.contains("Tidak diketahui"));
+    }
+
+    @Test
+    @DisplayName("informasiNim() menangani Base64 tidak valid")
+    void testInformasiNimBase64Invalid() {
+        String result = controller.informasiNim("###invalid###");
+        assertEquals("Input Base64 tidak valid.", result);
+    }
+
+    // ✅ Tes Perolehan Nilai
+    @Test
+    @DisplayName("perolehanNilai() menghitung nilai dan grade dengan benar")
+    void testPerolehanNilaiValid() {
+        String encoded = Base64.getEncoder().encodeToString("80,75,90".getBytes());
         String result = controller.perolehanNilai(encoded);
-
-        assertTrue(result.contains("Perolehan Nilai:"));
-        assertTrue(result.contains("Nilai Akhir"));
-        assertTrue(result.contains("Grade"));
+        assertTrue(result.contains("Grade: A") || result.contains("Grade: B"));
+        assertTrue(result.contains("Nilai Tertinggi"));
+        assertTrue(result.contains("Rata-rata"));
     }
 
-    // ==============================
-    // 3️⃣ Tes Perbedaan L dan Kebalikannya
-    // ==============================
     @Test
-    @DisplayName("perbedaanL() harus menghitung L dan kebalikannya dengan benar")
-    void testPerbedaanL() {
-        // Matriks 3x3
-        String input = """
-                3
-                1 2 3
-                4 5 6
-                7 8 9
-                """;
-        String encoded = Base64.getEncoder().encodeToString(input.getBytes());
+    @DisplayName("perolehanNilai() menangani input kosong")
+    void testPerolehanNilaiKosong() {
+        String result = controller.perolehanNilai("");
+        assertEquals("Data nilai tidak boleh kosong.", result);
+    }
+
+    @Test
+    @DisplayName("perolehanNilai() menangani input tidak lengkap")
+    void testPerolehanNilaiTidakLengkap() {
+        String encoded = Base64.getEncoder().encodeToString("80,75".getBytes());
+        String result = controller.perolehanNilai(encoded);
+        assertEquals("Data nilai tidak lengkap. Harus berisi minimal 3 nilai.", result);
+    }
+
+    @Test
+    @DisplayName("perolehanNilai() menangani format nilai tidak valid")
+    void testPerolehanNilaiTidakValid() {
+        String encoded = Base64.getEncoder().encodeToString("a,b,c".getBytes());
+        String result = controller.perolehanNilai(encoded);
+        assertTrue(result.contains("Format nilai tidak valid"));
+    }
+
+    @Test
+    @DisplayName("perolehanNilai() menangani Base64 tidak valid")
+    void testPerolehanNilaiBase64Invalid() {
+        String result = controller.perolehanNilai("$$$invalid$$$");
+        assertEquals("Input Base64 tidak valid.", result);
+    }
+
+    // ✅ Tes Perbedaan L
+    @Test
+    @DisplayName("perbedaanL() menghitung jumlah huruf L/l dan Non-L serta kebalikan teks")
+    void testPerbedaanLValid() {
+        String encoded = Base64.getEncoder().encodeToString("Lalala".getBytes());
         String result = controller.perbedaanL(encoded);
-
-        assertTrue(result.contains("Nilai L"));
-        assertTrue(result.contains("Nilai Kebalikan L"));
-        assertTrue(result.contains("Perbedaan"));
-        assertTrue(result.contains("Dominan"));
+        assertTrue(result.contains("Jumlah huruf L/l"));
+        assertTrue(result.contains("Kebalikan"));
+        assertTrue(result.contains("Apakah sama?"));
     }
 
-    // ==============================
-    // 4️⃣ Tes Paling Ter
-    // ==============================
     @Test
-    @DisplayName("palingTer() harus menemukan nilai tertinggi, terendah, terbanyak, dan tersedikit")
-    void testPalingTer() {
-        String input = """
-                3
-                7
-                3
-                7
-                8
-                9
-                3
-                ---
-                """;
-        String encoded = Base64.getEncoder().encodeToString(input.getBytes());
-        String result = controller.palingTer(encoded);
+    @DisplayName("perbedaanL() menangani input kosong")
+    void testPerbedaanLKosong() {
+        String result = controller.perbedaanL("");
+        assertEquals("Input tidak boleh kosong.", result);
+    }
 
-        assertTrue(result.contains("Tertinggi"));
-        assertTrue(result.contains("Terendah"));
-        assertTrue(result.contains("Terbanyak"));
-        assertTrue(result.contains("Tersedikit"));
+    @Test
+    @DisplayName("perbedaanL() menangani Base64 tidak valid")
+    void testPerbedaanLBase64Invalid() {
+        String result = controller.perbedaanL("##invalid##");
+        assertEquals("Input Base64 tidak valid.", result);
+    }
+
+    // ✅ Tes Paling Ter
+    @Test
+    @DisplayName("palingTer() menemukan nilai tertinggi dan terendah dengan format key=value")
+    void testPalingTerValid() {
+        String encoded = Base64.getEncoder().encodeToString("Ali=90,Budi=80,Cici=70".getBytes());
+        String result = controller.palingTer(encoded);
+        assertTrue(result.contains("Nilai Tertinggi"));
+        assertTrue(result.contains("Nilai Terendah"));
+    }
+
+    @Test
+    @DisplayName("palingTer() menangani input kosong")
+    void testPalingTerKosong() {
+        String result = controller.palingTer("");
+        assertEquals("Data tidak boleh kosong.", result);
+    }
+
+    @Test
+    @DisplayName("palingTer() menangani Base64 tidak valid")
+    void testPalingTerBase64Invalid() {
+        String result = controller.palingTer("$$$invalid$$$");
+        assertEquals("Input Base64 tidak valid.", result);
+    }
+
+    @Test
+    @DisplayName("palingTer() menangani pasangan nilai yang tidak valid")
+    void testPalingTerFormatSalah() {
+        String encoded = Base64.getEncoder().encodeToString("Ali=90,Budi=X".getBytes());
+        String result = controller.palingTer(encoded);
+        assertTrue(result.contains("Format nilai salah"));
+    }
+
+    @Test
+    @DisplayName("palingTer() menangani data tanpa pasangan valid")
+    void testPalingTerDataKosongValid() {
+        String encoded = Base64.getEncoder().encodeToString("".getBytes());
+        String result = controller.palingTer(encoded);
+        assertTrue(result.contains("Tidak ada data") || result.contains("Tidak ada pasangan"));
     }
 }
